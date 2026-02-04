@@ -1,0 +1,1 @@
+"""Asgard autopost package."""

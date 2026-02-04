@@ -1,0 +1,111 @@
+app:
+  timezone: "Europe/Moscow"
+  fetch_interval_minutes: 30
+  review_batch_size: 8
+  auto_schedule: true
+  schedule_times:
+    - "10:00"
+    - "12:00"
+    - "14:00"
+    - "16:00"
+    - "18:00"
+    - "20:00"
+    - "22:00"
+  include_source_link: false
+  title_uppercase: true
+  max_title_chars: 90
+  default_hashtag: "#майнинг"
+
+ai:
+  provider: "ollama"
+  model: "llama3.1:8b"
+  temperature: 0.2
+  max_tokens: 800
+  prompt_news: "prompt_news.txt"
+  prompt_explain: "prompt_explain.txt"
+  explain_keywords:
+    - "что это значит"
+    - "разбор"
+    - "пояснение"
+    - "объясняем"
+    - "почему"
+
+image:
+  enabled: true
+  template_path: "templates/base.png"
+  output_dir: "output"
+  size: [1080, 1080]
+  title_box: [120, 150, 840, 260]
+  title_color: "#22C55E"
+  title_font_size: 72
+  title_font_paths:
+    - "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+    - "/System/Library/Fonts/Supplemental/HelveticaNeue.ttc"
+    - "/System/Library/Fonts/Supplemental/Arial.ttf"
+  stroke_width: 2
+  stroke_fill: "#000000"
+  background_color: "#FFFFFF"
+
+categories:
+  mining:
+    hashtag: "#майнинг"
+    keywords:
+      - "mining"
+      - "майнинг"
+      - "asic"
+      - "antminer"
+      - "difficulty"
+      - "сложност"
+      - "hashrate"
+      - "хешрейт"
+      - "pool"
+      - "пул"
+      - "ферм"
+  market:
+    hashtag: "#btc"
+    keywords:
+      - "btc"
+      - "bitcoin"
+      - "цена"
+      - "курс"
+      - "рынок"
+      - "etf"
+      - "макро"
+  regulation:
+    hashtag: "#регуляция"
+    keywords:
+      - "regulation"
+      - "law"
+      - "закон"
+      - "регуля"
+      - "запрет"
+      - "налог"
+      - "licens"
+  infrastructure:
+    hashtag: "#инфраструктура"
+    keywords:
+      - "энерг"
+      - "power"
+      - "electric"
+      - "grid"
+      - "data center"
+      - "дата-центр"
+      - "инфраструкт"
+  tech:
+    hashtag: "#техника"
+    keywords:
+      - "firmware"
+      - "прошив"
+      - "cooling"
+      - "охлажд"
+      - "chip"
+      - "чип"
+  security:
+    hashtag: "#безопасность"
+    keywords:
+      - "hack"
+      - "exploit"
+      - "scam"
+      - "взлом"
+      - "фишинг"
+      - "утеч"
