@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from io import BytesIO
 from math import ceil
 import os
-import re
 
 from PIL import Image
 from pptx import Presentation
@@ -23,24 +22,25 @@ SLIDE_W = Inches(10)
 SLIDE_H = Inches(5.625)
 
 # Layout constants
-MARGIN_X = Inches(0.6)
-TITLE_Y = Inches(0.25)
-TITLE_H = Inches(0.7)
-TITLE_LINE_Y = Inches(0.98)
-TITLE_LINE_W = Inches(2.6)
-TITLE_LINE_H = Inches(0.04)
-CONTENT_Y = Inches(1.25)
-FOOTER_H = Inches(0.5)
+MARGIN_X = Inches(0.75)
+TITLE_Y = Inches(0.2)
+TITLE_H = Inches(0.9)
+CONTENT_Y = Inches(1.45)
+FOOTER_H = Inches(0.45)
 GAP = Inches(0.35)
+STRIPE_W = Inches(0.12)
+CARD_PAD_X = Inches(0.3)
+CARD_PAD_Y = Inches(0.25)
 
 # Colors
-COLOR_BG = RGBColor(0xFF, 0xFF, 0xFF)
-COLOR_TEXT = RGBColor(0x0A, 0x0A, 0x0A)
+COLOR_BG_DARK = RGBColor(0x0A, 0x0A, 0x0A)
+COLOR_TEXT_LIGHT = RGBColor(0xFF, 0xFF, 0xFF)
+COLOR_TEXT_DARK = RGBColor(0x0A, 0x0A, 0x0A)
+COLOR_MUTED_LIGHT = RGBColor(0xC2, 0xC2, 0xC2)
+COLOR_CARD = RGBColor(0xFF, 0xFF, 0xFF)
+COLOR_CARD_ALT = RGBColor(0xF1, 0xF5, 0xF9)
 COLOR_ACCENT = RGBColor(0x5E, 0xC0, 0x62)
 COLOR_ACCENT_2 = RGBColor(0x00, 0x97, 0xA7)
-COLOR_MUTED = RGBColor(0x6B, 0x72, 0x80)
-COLOR_CALLOUT_BG = RGBColor(0xE8, 0xF4, 0xEC)
-COLOR_FOOTER_BG = RGBColor(0xF1, 0xF3, 0xF6)
 
 # Fonts
 FONT_TITLE = "Montserrat"
@@ -217,7 +217,7 @@ def _add_text_box(
     font_name,
     font_size,
     bold=False,
-    color=COLOR_TEXT,
+    color=COLOR_TEXT_DARK,
     align=PP_ALIGN.LEFT,
     line_spacing=1.1,
 ):
@@ -237,7 +237,7 @@ def _add_text_box(
     return box
 
 
-def _apply_text_frame(tf, lines, font_name, font_size, bold=False, color=COLOR_TEXT, align=PP_ALIGN.LEFT):
+def _apply_text_frame(tf, lines, font_name, font_size, bold=False, color=COLOR_TEXT_DARK, align=PP_ALIGN.LEFT):
     tf.clear()
     tf.word_wrap = True
     for idx, line in enumerate(lines):
@@ -265,8 +265,21 @@ def _add_picture_contain(slide, image_blob, box_left, box_top, box_width, box_he
     slide.shapes.add_picture(stream, left, top, width=width, height=height)
 
 
-def _add_title(slide, title: str):
-    _add_rect(slide, 0, 0, SLIDE_W, Inches(0.08), COLOR_ACCENT)
+def _pick_accents(index: int) -> tuple[RGBColor, RGBColor]:
+    if index % 2 == 0:
+        return COLOR_ACCENT, COLOR_ACCENT_2
+    return COLOR_ACCENT_2, COLOR_ACCENT
+
+
+def _add_base(slide, accent, accent_2):
+    _add_rect(slide, 0, 0, SLIDE_W, SLIDE_H, COLOR_BG_DARK)
+    _add_rect(slide, 0, 0, Inches(0.28), SLIDE_H, accent)
+    _add_rect(slide, Inches(0.28), 0, SLIDE_W, Inches(0.08), accent_2)
+    diagonal = _add_rect(slide, Inches(6.6), Inches(-0.7), Inches(4.6), Inches(1.9), accent_2)
+    diagonal.rotation = -8
+
+
+def _add_title(slide, title: str, accent):
     _add_text_box(
         slide,
         MARGIN_X,
@@ -275,11 +288,12 @@ def _add_title(slide, title: str):
         TITLE_H,
         [title],
         FONT_TITLE,
-        28,
+        30,
         bold=True,
-        color=COLOR_TEXT,
+        color=COLOR_TEXT_LIGHT,
+        line_spacing=1.0,
     )
-    _add_rect(slide, MARGIN_X, TITLE_LINE_Y, TITLE_LINE_W, TITLE_LINE_H, COLOR_ACCENT_2)
+    _add_rect(slide, MARGIN_X, TITLE_Y + TITLE_H - Inches(0.08), Inches(2.6), Inches(0.08), accent)
 
 
 def _format_contacts(contacts: list[str]) -> str:
@@ -297,21 +311,48 @@ def _format_contacts(contacts: list[str]) -> str:
     return " | ".join(combined)
 
 
-def _add_footer(slide, contacts: list[str]):
+def _add_footer(slide, contacts: list[str], accent_2):
     text = _format_contacts(contacts)
     if not text:
         return
-    _add_rect(slide, 0, SLIDE_H - FOOTER_H, SLIDE_W, FOOTER_H, COLOR_FOOTER_BG)
+    _add_rect(slide, 0, SLIDE_H - Inches(0.04), SLIDE_W, Inches(0.04), accent_2)
     _add_text_box(
         slide,
         MARGIN_X,
-        SLIDE_H - FOOTER_H + Inches(0.08),
+        SLIDE_H - FOOTER_H + Inches(0.06),
         SLIDE_W - 2 * MARGIN_X,
         FOOTER_H - Inches(0.12),
         [text],
         FONT_BODY,
         10,
-        color=COLOR_MUTED,
+        color=COLOR_MUTED_LIGHT,
+    )
+
+
+def _add_card(slide, left, top, width, height, accent):
+    card = _add_rect(slide, left, top, width, height, COLOR_CARD, radius=True)
+    _add_rect(slide, left, top, STRIPE_W, height, accent)
+    return card
+
+
+def _card_inner_bounds(left, top, width, height):
+    inner_left = left + STRIPE_W + CARD_PAD_X
+    inner_top = top + CARD_PAD_Y
+    inner_width = width - STRIPE_W - (CARD_PAD_X * 2)
+    inner_height = height - (CARD_PAD_Y * 2)
+    return inner_left, inner_top, inner_width, inner_height
+
+
+def _add_callout(slide, left, top, width, height, lines, accent):
+    rect = _add_rect(slide, left, top, width, height, accent, line_color=accent, radius=True)
+    _apply_text_frame(
+        rect.text_frame,
+        lines,
+        FONT_TITLE,
+        14,
+        bold=True,
+        color=COLOR_TEXT_LIGHT,
+        align=PP_ALIGN.CENTER,
     )
 
 
@@ -325,59 +366,86 @@ def _largest_image(images: list[dict], min_ratio: float = 0.1) -> dict | None:
     return None
 
 
-def _build_cover_slide(slide, data: SlideData):
-    _add_title(slide, data.title.replace(" | ", "\n"))
+def _build_cover_slide(slide, data: SlideData, accent, accent_2):
+    _add_base(slide, accent, accent_2)
+    title_text = data.title.replace(" | ", "\n")
+    _add_text_box(
+        slide,
+        MARGIN_X,
+        Inches(0.55),
+        Inches(5.4),
+        Inches(2.1),
+        [title_text],
+        FONT_TITLE,
+        36,
+        bold=True,
+        color=COLOR_TEXT_LIGHT,
+        line_spacing=1.05,
+    )
+
     subtitle_source = data.lead if data.lead else data.callouts
     subtitle = [t.strip("-") for t in subtitle_source] if subtitle_source else []
     if subtitle:
         _add_text_box(
             slide,
             MARGIN_X,
-            CONTENT_Y,
-            Inches(5.2),
-            Inches(1.2),
+            Inches(2.45),
+            Inches(5.0),
+            Inches(0.9),
             subtitle,
             FONT_BODY,
             16,
-            color=COLOR_TEXT,
+            color=COLOR_MUTED_LIGHT,
         )
 
     logo = _largest_image(data.images, min_ratio=0.02)
+    card_left = Inches(6.2)
+    card_top = Inches(1.3)
+    card_w = Inches(3.1)
+    card_h = Inches(2.5)
+    _add_card(slide, card_left, card_top, card_w, card_h, accent_2)
     if logo:
         _add_picture_contain(
             slide,
             logo["blob"],
-            Inches(6.0),
-            Inches(1.5),
-            Inches(3.3),
-            Inches(2.4),
+            card_left + STRIPE_W + Inches(0.2),
+            card_top + Inches(0.2),
+            card_w - STRIPE_W - Inches(0.4),
+            card_h - Inches(0.4),
         )
 
-    _add_footer(slide, data.contacts)
+    _add_footer(slide, data.contacts, accent_2)
 
 
-def _build_text_slide(slide, data: SlideData):
-    _add_title(slide, data.title)
-    content_h = int(SLIDE_H - CONTENT_Y - FOOTER_H - Inches(0.2))
+def _build_text_slide(slide, data: SlideData, accent, accent_2):
+    _add_base(slide, accent, accent_2)
+    _add_title(slide, data.title, accent)
+    card_left = MARGIN_X
+    card_top = CONTENT_Y
+    card_w = SLIDE_W - 2 * MARGIN_X
+    card_h = SLIDE_H - CONTENT_Y - FOOTER_H - Inches(0.12)
+    _add_card(slide, card_left, card_top, card_w, card_h, accent)
 
-    cursor_y = CONTENT_Y
+    inner_left, inner_top, inner_w, inner_h = _card_inner_bounds(card_left, card_top, card_w, card_h)
+    cursor_y = inner_top
+
     if data.lead:
-        lead_h = Inches(0.35 * len(data.lead) + 0.1)
+        lead_h = Inches(0.28 * len(data.lead) + 0.15)
         _add_text_box(
             slide,
-            MARGIN_X,
+            inner_left,
             cursor_y,
-            SLIDE_W - 2 * MARGIN_X,
+            inner_w,
             lead_h,
             data.lead,
             FONT_BODY,
             16,
-            color=COLOR_TEXT,
+            color=COLOR_TEXT_DARK,
         )
         cursor_y += lead_h + Inches(0.1)
 
-    callout_h = Inches(0.7) if data.callouts else Inches(0)
-    bullets_h = content_h - int(callout_h) - int(cursor_y - CONTENT_Y)
+    callout_h = Inches(0.6) if data.callouts else Inches(0)
+    bullets_h = inner_h - (cursor_y - inner_top) - callout_h - Inches(0.05)
     bullets = data.bullets
 
     if bullets:
@@ -385,18 +453,18 @@ def _build_text_slide(slide, data: SlideData):
             mid = ceil(len(bullets) / 2)
             left_items = [f"• {b}" for b in bullets[:mid]]
             right_items = [f"• {b}" for b in bullets[mid:]]
-            left_w = (SLIDE_W - 2 * MARGIN_X - GAP) / 2
-            right_x = MARGIN_X + left_w + GAP
+            left_w = (inner_w - GAP) / 2
+            right_x = inner_left + left_w + GAP
             _add_text_box(
                 slide,
-                MARGIN_X,
+                inner_left,
                 cursor_y,
                 left_w,
                 bullets_h,
                 left_items,
                 FONT_BODY,
                 16,
-                color=COLOR_TEXT,
+                color=COLOR_TEXT_DARK,
             )
             _add_text_box(
                 slide,
@@ -407,224 +475,203 @@ def _build_text_slide(slide, data: SlideData):
                 right_items,
                 FONT_BODY,
                 16,
-                color=COLOR_TEXT,
+                color=COLOR_TEXT_DARK,
             )
         else:
             _add_text_box(
                 slide,
-                MARGIN_X,
+                inner_left,
                 cursor_y,
-                SLIDE_W - 2 * MARGIN_X,
+                inner_w,
                 bullets_h,
                 [f"• {b}" for b in bullets],
                 FONT_BODY,
                 16,
-                color=COLOR_TEXT,
+                color=COLOR_TEXT_DARK,
             )
 
     if data.callouts:
-        callout = _add_rect(
-            slide,
-            MARGIN_X,
-            SLIDE_H - FOOTER_H - Inches(0.9),
-            SLIDE_W - 2 * MARGIN_X,
-            Inches(0.7),
-            COLOR_CALLOUT_BG,
-            line_color=COLOR_ACCENT,
-            radius=True,
-        )
-        _apply_text_frame(
-            callout.text_frame,
-            data.callouts,
-            FONT_TITLE,
-            16,
-            bold=True,
-            color=COLOR_ACCENT,
-        )
+        callout_top = inner_top + inner_h - callout_h
+        _add_callout(slide, inner_left, callout_top, inner_w, callout_h, data.callouts, accent_2)
 
-    _add_footer(slide, data.contacts)
+    _add_footer(slide, data.contacts, accent_2)
 
 
-def _build_split_slide(slide, data: SlideData, image: dict | None):
-    _add_title(slide, data.title)
-    content_h = SLIDE_H - CONTENT_Y - FOOTER_H - Inches(0.2)
-    left_w = Inches(5.6)
-    right_w = SLIDE_W - 2 * MARGIN_X - left_w - GAP
-    right_x = MARGIN_X + left_w + GAP
+def _build_split_slide(slide, data: SlideData, image: dict | None, accent, accent_2):
+    _add_base(slide, accent, accent_2)
+    _add_title(slide, data.title, accent)
+    card_top = CONTENT_Y
+    card_h = SLIDE_H - CONTENT_Y - FOOTER_H - Inches(0.12)
+    card_w = SLIDE_W - 2 * MARGIN_X
+    left_w = (card_w - GAP) / 2
+    right_w = left_w
+    left_x = MARGIN_X
+    right_x = left_x + left_w + GAP
 
-    cursor_y = CONTENT_Y
+    _add_card(slide, left_x, card_top, left_w, card_h, accent)
+    _add_card(slide, right_x, card_top, right_w, card_h, accent_2)
+
+    inner_left, inner_top, inner_w, inner_h = _card_inner_bounds(left_x, card_top, left_w, card_h)
+    cursor_y = inner_top
+
     if data.lead:
-        lead_h = Inches(0.35 * len(data.lead) + 0.1)
+        lead_h = Inches(0.28 * len(data.lead) + 0.15)
         _add_text_box(
             slide,
-            MARGIN_X,
+            inner_left,
             cursor_y,
-            left_w,
+            inner_w,
             lead_h,
             data.lead,
             FONT_BODY,
             16,
-            color=COLOR_TEXT,
+            color=COLOR_TEXT_DARK,
         )
         cursor_y += lead_h + Inches(0.1)
 
     if data.bullets:
         _add_text_box(
             slide,
-            MARGIN_X,
+            inner_left,
             cursor_y,
-            left_w,
-            content_h - (cursor_y - CONTENT_Y),
+            inner_w,
+            inner_h - (cursor_y - inner_top),
             [f"• {b}" for b in data.bullets],
             FONT_BODY,
             16,
-            color=COLOR_TEXT,
+            color=COLOR_TEXT_DARK,
         )
 
     if data.callouts:
-        callout = _add_rect(
+        _add_callout(
             slide,
-            MARGIN_X,
-            SLIDE_H - FOOTER_H - Inches(0.9),
-            left_w,
-            Inches(0.7),
-            COLOR_CALLOUT_BG,
-            line_color=COLOR_ACCENT,
-            radius=True,
-        )
-        _apply_text_frame(
-            callout.text_frame,
+            inner_left,
+            inner_top + inner_h - Inches(0.6),
+            inner_w,
+            Inches(0.6),
             data.callouts,
-            FONT_TITLE,
-            16,
-            bold=True,
-            color=COLOR_ACCENT,
+            accent,
         )
 
     if image:
-        _add_picture_contain(
-            slide,
-            image["blob"],
-            right_x,
-            CONTENT_Y,
-            right_w,
-            content_h,
-        )
+        img_left, img_top, img_w, img_h = _card_inner_bounds(right_x, card_top, right_w, card_h)
+        _add_picture_contain(slide, image["blob"], img_left, img_top, img_w, img_h)
 
-    _add_footer(slide, data.contacts)
+    _add_footer(slide, data.contacts, accent_2)
 
 
-def _build_image_slide(slide, data: SlideData, image: dict | None):
-    _add_title(slide, data.title)
-    content_h = SLIDE_H - CONTENT_Y - FOOTER_H - Inches(0.2)
-    cursor_y = CONTENT_Y
+def _build_image_slide(slide, data: SlideData, image: dict | None, accent, accent_2):
+    _add_base(slide, accent, accent_2)
+    _add_title(slide, data.title, accent)
+    card_left = MARGIN_X
+    card_top = CONTENT_Y
+    card_w = SLIDE_W - 2 * MARGIN_X
+    card_h = SLIDE_H - CONTENT_Y - FOOTER_H - Inches(0.12)
+    _add_card(slide, card_left, card_top, card_w, card_h, accent)
+
+    inner_left, inner_top, inner_w, inner_h = _card_inner_bounds(card_left, card_top, card_w, card_h)
+    cursor_y = inner_top
+
     if data.lead:
-        lead_h = Inches(0.35 * len(data.lead) + 0.1)
+        lead_h = Inches(0.28 * len(data.lead) + 0.15)
         _add_text_box(
             slide,
-            MARGIN_X,
+            inner_left,
             cursor_y,
-            SLIDE_W - 2 * MARGIN_X,
+            inner_w,
             lead_h,
             data.lead,
             FONT_BODY,
             16,
-            color=COLOR_TEXT,
+            color=COLOR_TEXT_DARK,
         )
         cursor_y += lead_h + Inches(0.1)
 
     if data.callouts:
-        callout = _add_rect(
-            slide,
-            MARGIN_X,
-            cursor_y,
-            SLIDE_W - 2 * MARGIN_X,
-            Inches(0.7),
-            COLOR_CALLOUT_BG,
-            line_color=COLOR_ACCENT,
-            radius=True,
-        )
-        _apply_text_frame(
-            callout.text_frame,
-            data.callouts,
-            FONT_TITLE,
-            16,
-            bold=True,
-            color=COLOR_ACCENT,
-        )
-        cursor_y += Inches(0.8)
+        _add_callout(slide, inner_left, cursor_y, inner_w, Inches(0.6), data.callouts, accent_2)
+        cursor_y += Inches(0.7)
 
     if image:
         _add_picture_contain(
             slide,
             image["blob"],
-            MARGIN_X,
+            inner_left,
             cursor_y,
-            SLIDE_W - 2 * MARGIN_X,
-            content_h - (cursor_y - CONTENT_Y),
+            inner_w,
+            inner_h - (cursor_y - inner_top),
         )
 
-    _add_footer(slide, data.contacts)
+    _add_footer(slide, data.contacts, accent_2)
 
 
-def _build_cta_slide(slide, data: SlideData):
-    _add_title(slide, data.title)
-    content_h = SLIDE_H - CONTENT_Y - FOOTER_H - Inches(0.2)
-    cursor_y = CONTENT_Y
+def _build_cta_slide(slide, data: SlideData, accent, accent_2):
+    _add_base(slide, accent, accent_2)
+    _add_title(slide, data.title, accent)
+    card_left = MARGIN_X
+    card_top = CONTENT_Y
+    card_w = SLIDE_W - 2 * MARGIN_X
+    card_h = SLIDE_H - CONTENT_Y - FOOTER_H - Inches(0.12)
+    _add_card(slide, card_left, card_top, card_w, card_h, accent)
+
+    inner_left, inner_top, inner_w, inner_h = _card_inner_bounds(card_left, card_top, card_w, card_h)
+    cursor_y = inner_top
 
     if data.lead:
-        lead_h = Inches(0.35 * len(data.lead) + 0.1)
+        lead_h = Inches(0.28 * len(data.lead) + 0.15)
         _add_text_box(
             slide,
-            MARGIN_X,
+            inner_left,
             cursor_y,
-            SLIDE_W - 2 * MARGIN_X,
+            inner_w,
             lead_h,
             data.lead,
             FONT_BODY,
             16,
-            color=COLOR_TEXT,
+            color=COLOR_TEXT_DARK,
         )
         cursor_y += lead_h + Inches(0.1)
 
     if data.bullets:
         _add_text_box(
             slide,
-            MARGIN_X,
+            inner_left,
             cursor_y,
-            SLIDE_W - 2 * MARGIN_X,
-            content_h - Inches(1.5),
+            inner_w,
+            inner_h - Inches(1.1),
             [f"• {b}" for b in data.bullets],
             FONT_BODY,
             16,
-            color=COLOR_TEXT,
+            color=COLOR_TEXT_DARK,
         )
-        cursor_y += Inches(1.3)
 
     if data.cta:
-        cta_w = Inches(3.2)
-        cta_h = Inches(0.6)
-        start_x = MARGIN_X
+        cta_w = Inches(3.0)
+        cta_h = Inches(0.62)
+        start_x = inner_left
+        cta_top = inner_top + inner_h - Inches(0.8)
         for idx, text in enumerate(data.cta[:2]):
+            color = accent if idx == 0 else accent_2
             rect = _add_rect(
                 slide,
-                start_x + idx * (cta_w + Inches(0.3)),
-                SLIDE_H - FOOTER_H - Inches(1.0),
+                start_x + idx * (cta_w + Inches(0.4)),
+                cta_top,
                 cta_w,
                 cta_h,
-                COLOR_ACCENT,
-                line_color=COLOR_ACCENT,
+                color,
+                line_color=color,
                 radius=True,
             )
-            tf = rect.text_frame
-            tf.text = text
-            tf.paragraphs[0].font.name = FONT_TITLE
-            tf.paragraphs[0].font.size = Pt(14)
-            tf.paragraphs[0].font.bold = True
-            tf.paragraphs[0].font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-            tf.paragraphs[0].alignment = PP_ALIGN.CENTER
+            _apply_text_frame(
+                rect.text_frame,
+                [text],
+                FONT_TITLE,
+                14,
+                bold=True,
+                color=COLOR_TEXT_LIGHT,
+                align=PP_ALIGN.CENTER,
+            )
 
-    _add_footer(slide, data.contacts)
+    _add_footer(slide, data.contacts, accent_2)
 
 
 def main():
@@ -637,23 +684,24 @@ def main():
     for index, slide in enumerate(prs.slides):
         data = _extract_slide_data(slide)
         new_slide = new_prs.slides.add_slide(blank)
+        accent, accent_2 = _pick_accents(index)
 
         if index == 0:
-            _build_cover_slide(new_slide, data)
+            _build_cover_slide(new_slide, data, accent, accent_2)
             continue
 
         if data.cta:
-            _build_cta_slide(new_slide, data)
+            _build_cta_slide(new_slide, data, accent, accent_2)
             continue
 
         large_image = _largest_image(data.images, min_ratio=0.12)
 
         if large_image and len(data.bullets) <= 2 and len(data.lead) <= 1:
-            _build_image_slide(new_slide, data, large_image)
+            _build_image_slide(new_slide, data, large_image, accent, accent_2)
         elif large_image:
-            _build_split_slide(new_slide, data, large_image)
+            _build_split_slide(new_slide, data, large_image, accent, accent_2)
         else:
-            _build_text_slide(new_slide, data)
+            _build_text_slide(new_slide, data, accent, accent_2)
 
     new_prs.save(OUTPUT_PATH)
 
