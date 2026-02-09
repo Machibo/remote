@@ -1,0 +1,9 @@
+python-telegram-bot
+telethon
+requests
+beautifulsoup4
+feedparser
+PyYAML
+Pillow
+python-dotenv
+tzdata

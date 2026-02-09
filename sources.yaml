@@ -1,0 +1,23 @@
+sources:
+  - name: decenter
+    type: telegram
+    channel: "DeCenter"
+    limit: 20
+
+  - name: investing_ru
+    type: html
+    url: "https://ru.investing.com/news/cryptocurrency-news"
+    base_url: "https://ru.investing.com"
+    item_selector: "article"
+    link_selector: "a"
+    title_selector: "a"
+    link_pattern: "/news/"
+
+  - name: cryptonews_mining
+    type: html
+    url: "https://cryptonews.net/news/mining/"
+    base_url: "https://cryptonews.net"
+    item_selector: "a"
+    link_selector: null
+    title_selector: null
+    link_pattern: "/news/"
