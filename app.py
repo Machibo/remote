@@ -244,11 +244,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             scheduled_at = schedule_next_slot(datetime.now(timezone.utc))
         set_status(conn, item_id, "approved", scheduled_at=scheduled_at)
         note = "Утверждено"
+        if not CONFIG.app.get("publish_enabled", True):
+            note += " (публикация отключена)"
         if scheduled_at:
             note += f" → публикация {scheduled_at} UTC"
-        await query.edit_message_caption(
-            caption=f"{query.message.caption}\n\n✅ {note}"[:1024]
-        )
+        base_text = query.message.caption or query.message.text or ""
+        updated = f"{base_text}\n\n✅ {note}"
+        if query.message.caption:
+            await query.edit_message_caption(caption=updated[:1024])
+        else:
+            await query.edit_message_text(updated[:4096])
     elif action == "reject":
         set_status(conn, item_id, "rejected")
         if query.message.caption:
@@ -260,6 +265,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def post_due(context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not CONFIG.app.get("publish_enabled", True):
+        return
     conn = get_db()
     now_iso = datetime.utcnow().replace(tzinfo=None).isoformat(timespec="seconds")
     due = fetch_due_posts(conn, now_iso, limit=10)
@@ -320,7 +327,10 @@ def main() -> None:
         first=5,
     )
     application.job_queue.run_repeating(send_for_review, interval=60, first=10)
-    application.job_queue.run_repeating(post_due, interval=60, first=15)
+    if CONFIG.app.get("publish_enabled", True):
+        application.job_queue.run_repeating(post_due, interval=60, first=15)
+    else:
+        LOGGER.info("Publishing disabled: posts will not be sent to channel.")
 
     LOGGER.info("Asgard bot started.")
     application.run_polling()
